@@ -76,7 +76,6 @@ class EachTest < ActiveRecord::TestCase
     end
 
     Zine.primary_key = "title"
-    Zine.reset_column_information
     assert_raise(ArgumentError) do
       Zine.select(:id).find_each(batch_size: 1) do
         flunk "should not call this block"
@@ -84,7 +83,6 @@ class EachTest < ActiveRecord::TestCase
     end
   ensure
     Zine.primary_key = "id"
-    Zine.reset_column_information
   end
 
   def test_each_should_not_raise_if_select_is_set_primary_key
@@ -97,13 +95,11 @@ class EachTest < ActiveRecord::TestCase
     end
 
     Zine.primary_key = "title"
-    Zine.reset_column_information
     assert_nothing_raised do
       Zine.select(:title).find_each(batch_size: 1) {}
     end
   ensure
     Zine.primary_key = "id"
-    Zine.reset_column_information
   end
 
   def test_each_should_execute_if_id_is_in_select
@@ -446,7 +442,6 @@ class EachTest < ActiveRecord::TestCase
 
   def test_in_batches_should_not_be_loaded_when_primary_key_is_title
     Zine.primary_key = "title"
-    Zine.reset_column_information
 
     Zine.in_batches(of: 1) do |relation|
       assert_not relation.loaded?
@@ -457,19 +452,16 @@ class EachTest < ActiveRecord::TestCase
     end
   ensure
     Zine.primary_key = "id"
-    Zine.reset_column_information
   end
 
   def test_in_batches_should_be_loaded_when_primary_key_is_title
     Zine.primary_key = "title"
-    Zine.reset_column_information
 
     Zine.in_batches(of: 1, load: true) do |relation|
       assert relation.loaded?
     end
   ensure
     Zine.primary_key = "id"
-    Zine.reset_column_information
   end
 
   def test_in_batches_if_not_loaded_executes_more_queries
