@@ -1,13 +1,15 @@
 require "cases/helper"
 require "models/post"
 require "models/subscriber"
+require "models/zine"
 
 class EachTest < ActiveRecord::TestCase
-  fixtures :posts, :subscribers
+  fixtures :posts, :subscribers, :zines
 
   def setup
-    @posts = Post.order("id asc")
+    @posts = Post.order("id ASC")
     @total = Post.count
+    @total_plus_one = @total + 1
     Post.count("id") # preheat arel's table cache
   end
 
@@ -21,30 +23,38 @@ class EachTest < ActiveRecord::TestCase
 
   def test_each_should_not_return_query_chain_and_execute_only_one_query
     assert_queries(1) do
-      result = Post.find_each(batch_size: 100000) {}
+      result = Post.find_each(batch_size: @total_plus_one) {}
       assert_nil result
+    end
+  end
+
+  def test_each_should_return_enumerator_without_block
+    assert_no_queries do
+      result = Post.find_each(batch_size: @total_plus_one)
+      assert_kind_of Enumerator, result
     end
   end
 
   def test_each_should_return_an_enumerator_if_no_block_is_present
     assert_queries(1) do
-      Post.find_each(batch_size: 100000).with_index do |post, index|
+      Post.find_each(batch_size: @total_plus_one).with_index do |post, index|
         assert_kind_of Post, post
         assert_kind_of Integer, index
       end
     end
   end
 
-  if Enumerator.method_defined? :size
-    def test_each_should_return_a_sized_enumerator
-      assert_equal 11, Post.find_each(batch_size: 1).size
-      assert_equal 5, Post.find_each(batch_size:  2, start: 7).size
-      assert_equal 11, Post.find_each(batch_size: 10_000).size
-    end
+  def test_each_should_return_a_sized_enumerator
+    start = 2
+    enum_size = @total_plus_one - start
+
+    assert_equal @total, Post.find_each(batch_size: 1).size
+    assert_equal enum_size, Post.find_each(batch_size:  2, start: start).size
+    assert_equal @total, Post.find_each(batch_size: @total_plus_one).size
   end
 
   def test_each_enumerator_should_execute_one_query_per_batch
-    assert_queries(@total + 1) do
+    assert_queries(@total_plus_one) do
       Post.find_each(batch_size: 1).with_index do |post, index|
         assert_kind_of Post, post
         assert_kind_of Integer, index
@@ -52,17 +62,56 @@ class EachTest < ActiveRecord::TestCase
     end
   end
 
-  def test_each_should_raise_if_select_is_set_without_id
+  def test_each_should_raise_if_select_is_set_without_primary_key
     assert_raise(ArgumentError) do
-      Post.select(:title).find_each(batch_size: 1) { |post|
+      Post.select(:title).find_each(batch_size: 1) do
         flunk "should not call this block"
-      }
+      end
     end
+
+    assert_raise(ArgumentError) do
+      Subscriber.select(:name).find_each(batch_size: 1) do
+        flunk "should not call this block"
+      end
+    end
+
+    Zine.primary_key = "title"
+    Zine.reset_column_information
+    assert_raise(ArgumentError) do
+      Zine.select(:id).find_each(batch_size: 1) do
+        flunk "should not call this block"
+      end
+    end
+  ensure
+    Zine.primary_key = "id"
+    Zine.reset_column_information
+  end
+
+  def test_each_should_not_raise_if_select_is_set_primary_key
+    assert_nothing_raised do
+      Post.select(:id).find_each(batch_size: 1) {}
+    end
+
+    assert_nothing_raised do
+      Subscriber.select(:nick).find_each(batch_size: 1) {}
+    end
+
+    Zine.primary_key = "title"
+    Zine.reset_column_information
+    assert_nothing_raised do
+      Zine.select(:title).find_each(batch_size: 1) {}
+    end
+  ensure
+    Zine.primary_key = "id"
+    Zine.reset_column_information
   end
 
   def test_each_should_execute_if_id_is_in_select
-    assert_queries(6) do
-      Post.select("id, title, type").find_each(batch_size: 2) do |post|
+    batch_size = 2
+    queries_count = (@total_plus_one / batch_size.to_f).ceil
+
+    assert_queries(queries_count) do
+      Post.select(:id, :title, :type).find_each(batch_size: batch_size) do |post|
         assert_kind_of Post, post
       end
     end
@@ -92,7 +141,7 @@ class EachTest < ActiveRecord::TestCase
 
   def test_warn_if_order_scope_is_set
     assert_called(ActiveRecord::Base.logger, :warn) do
-      Post.order("title").find_each { |post| post }
+      Post.order(:title).find_each {}
     end
   end
 
@@ -100,14 +149,14 @@ class EachTest < ActiveRecord::TestCase
     previous_logger = ActiveRecord::Base.logger
     ActiveRecord::Base.logger = nil
     assert_nothing_raised do
-      Post.order("comments_count DESC").find_each { |post| post }
+      Post.order("comments_count DESC").find_each {}
     end
   ensure
     ActiveRecord::Base.logger = previous_logger
   end
 
   def test_find_in_batches_should_return_batches
-    assert_queries(@total + 1) do
+    assert_queries(@total_plus_one) do
       Post.find_in_batches(batch_size: 1) do |batch|
         assert_kind_of Array, batch
         assert_kind_of Post, batch.first
@@ -125,26 +174,34 @@ class EachTest < ActiveRecord::TestCase
   end
 
   def test_find_in_batches_should_end_at_the_finish_option
-    assert_queries(6) do
-      Post.find_in_batches(batch_size: 1, finish: 5) do |batch|
+    finish = @total - 3
+    queries_count  = finish + 1
+
+    assert_queries(queries_count) do
+      Post.find_in_batches(batch_size: 1, finish: finish) do |batch|
         assert_kind_of Array, batch
         assert_kind_of Post, batch.first
       end
     end
   end
 
-  def test_find_in_batches_shouldnt_execute_query_unless_needed
+  def test_find_in_batches_should_not_execute_query_unless_needed
     assert_queries(2) do
-      Post.find_in_batches(batch_size: @total) { |batch| assert_kind_of Array, batch }
+      Post.find_in_batches(batch_size: @total) do |batch|
+        assert_kind_of Array, batch
+      end
     end
 
     assert_queries(1) do
-      Post.find_in_batches(batch_size: @total + 1) { |batch| assert_kind_of Array, batch }
+      Post.find_in_batches(batch_size: @total_plus_one) do |batch|
+        assert_kind_of Array, batch
+      end
     end
   end
 
   def test_find_in_batches_should_quote_batch_order
     c = Post.connection
+
     assert_sql(/ORDER BY #{c.quote_table_name('posts')}.#{c.quote_column_name('id')}/) do
       Post.find_in_batches(batch_size: 1) do |batch|
         assert_kind_of Array, batch
@@ -227,12 +284,12 @@ class EachTest < ActiveRecord::TestCase
 
   def test_find_in_batches_should_not_modify_passed_options
     assert_nothing_raised do
-      Post.find_in_batches({ batch_size: 42, start: 1 }.freeze) {}
+      Post.find_in_batches({ batch_size: 2, start: 1 }.freeze) {}
     end
   end
 
   def test_find_in_batches_should_use_any_column_as_primary_key
-    nick_order_subscribers = Subscriber.order("nick asc")
+    nick_order_subscribers = Subscriber.order("nick ASC")
     start_nick = nick_order_subscribers.second.nick
 
     subscribers = []
@@ -254,9 +311,11 @@ class EachTest < ActiveRecord::TestCase
 
   def test_find_in_batches_should_return_an_enumerator
     enum = nil
+
     assert_no_queries do
       enum = Post.find_in_batches(batch_size: 1)
     end
+
     assert_queries(4) do
       enum.first(4) do |batch|
         assert_kind_of Array, batch
@@ -294,24 +353,33 @@ class EachTest < ActiveRecord::TestCase
   end
 
   def test_in_batches_should_yield_relation_if_block_given
-    assert_queries(6) do
-      Post.in_batches(of: 2) do |relation|
+    of = 2
+    queries_count = (@total_plus_one / of.to_f).ceil
+
+    assert_queries(queries_count) do
+      Post.in_batches(of: of) do |relation|
         assert_kind_of ActiveRecord::Relation, relation
       end
     end
   end
 
   def test_in_batches_should_be_enumerable_if_no_block_given
-    assert_queries(6) do
-      Post.in_batches(of: 2).each do |relation|
+    of = 2
+    queries_count = (@total_plus_one / of.to_f).ceil
+
+    assert_queries(queries_count) do
+      Post.in_batches(of: of).each do |relation|
         assert_kind_of ActiveRecord::Relation, relation
       end
     end
   end
 
   def test_in_batches_each_record_should_yield_record_if_block_is_given
-    assert_queries(6) do
-      Post.in_batches(of: 2).each_record do |post|
+    of = 2
+    queries_count = (@total_plus_one / of.to_f).ceil
+
+    assert_queries(queries_count) do
+      Post.in_batches(of: of).each_record do |post|
         assert post.title.present?
         assert_kind_of Post, post
       end
@@ -319,8 +387,11 @@ class EachTest < ActiveRecord::TestCase
   end
 
   def test_in_batches_each_record_should_return_enumerator_if_no_block_given
-    assert_queries(6) do
-      Post.in_batches(of: 2).each_record.with_index do |post, i|
+    of = 2
+    queries_count = (@total_plus_one / of.to_f).ceil
+
+    assert_queries(queries_count) do
+      Post.in_batches(of: of).each_record.with_index do |post, i|
         assert post.title.present?
         assert_kind_of Post, post
       end
@@ -328,24 +399,31 @@ class EachTest < ActiveRecord::TestCase
   end
 
   def test_in_batches_each_record_should_be_ordered_by_id
+    of = 2
+    queries_count = (@total_plus_one / of.to_f).ceil
+
     ids = Post.order("id ASC").pluck(:id)
-    assert_queries(6) do
-      Post.in_batches(of: 2).each_record.with_index do |post, i|
+
+    assert_queries(queries_count) do
+      Post.in_batches(of: of).each_record.with_index do |post, i|
         assert_equal ids[i], post.id
       end
     end
   end
 
   def test_in_batches_update_all_affect_all_records
-    assert_queries(6 + 6) do # 6 selects, 6 updates
+    assert_queries(@total_plus_one) do
       Post.in_batches(of: 2).update_all(title: "updated-title")
     end
+
     assert_equal Post.all.pluck(:title), ["updated-title"] * Post.count
   end
 
   def test_in_batches_delete_all_should_not_delete_records_in_other_batches
     not_deleted_count = Post.where("id <= 2").count
+
     Post.where("id > 2").in_batches(of: 2).delete_all
+
     assert_equal 0, Post.where("id > 2").count
     assert_equal not_deleted_count, Post.count
   end
@@ -366,8 +444,36 @@ class EachTest < ActiveRecord::TestCase
     end
   end
 
+  def test_in_batches_should_not_be_loaded_when_primary_key_is_title
+    Zine.primary_key = "title"
+    Zine.reset_column_information
+
+    Zine.in_batches(of: 1) do |relation|
+      assert_not relation.loaded?
+    end
+
+    Zine.in_batches(of: 1, load: false) do |relation|
+      assert_not relation.loaded?
+    end
+  ensure
+    Zine.primary_key = "id"
+    Zine.reset_column_information
+  end
+
+  def test_in_batches_should_be_loaded_when_primary_key_is_title
+    Zine.primary_key = "title"
+    Zine.reset_column_information
+
+    Zine.in_batches(of: 1, load: true) do |relation|
+      assert relation.loaded?
+    end
+  ensure
+    Zine.primary_key = "id"
+    Zine.reset_column_information
+  end
+
   def test_in_batches_if_not_loaded_executes_more_queries
-    assert_queries(@total + 1) do
+    assert_queries(@total_plus_one) do
       Post.in_batches(of: 1, load: false) do |relation|
         assert_not relation.loaded?
       end
@@ -375,7 +481,7 @@ class EachTest < ActiveRecord::TestCase
   end
 
   def test_in_batches_should_return_relations
-    assert_queries(@total + 1) do
+    assert_queries(@total_plus_one) do
       Post.in_batches(of: 1) do |relation|
         assert_kind_of ActiveRecord::Relation, relation
       end
@@ -404,7 +510,7 @@ class EachTest < ActiveRecord::TestCase
     end
 
     assert_queries(1) do
-      Post.in_batches(of: @total + 1) { |relation| assert_kind_of ActiveRecord::Relation, relation }
+      Post.in_batches(of: @total_plus_one) { |relation| assert_kind_of ActiveRecord::Relation, relation }
     end
   end
 
@@ -440,6 +546,7 @@ class EachTest < ActiveRecord::TestCase
     SpecialPostWithDefaultScope.in_batches do |relation|
       posts.concat(relation)
     end
+
     assert_equal special_posts_ids, posts.map(&:id)
   end
 
@@ -450,7 +557,7 @@ class EachTest < ActiveRecord::TestCase
   end
 
   def test_in_batches_should_use_any_column_as_primary_key
-    nick_order_subscribers = Subscriber.order("nick asc")
+    nick_order_subscribers = Subscriber.order("nick ASC")
     start_nick = nick_order_subscribers.second.nick
 
     subscribers = []
@@ -472,11 +579,14 @@ class EachTest < ActiveRecord::TestCase
 
   def test_in_batches_should_return_an_enumerator
     enum = nil
+    queries_count = @total - 2
+
     assert_no_queries do
       enum = Post.in_batches(of: 1)
     end
-    assert_queries(4) do
-      enum.first(4) do |relation|
+
+    assert_queries(queries_count) do
+      enum.first(queries_count) do |relation|
         assert_kind_of ActiveRecord::Relation, relation
         assert_kind_of Post, relation.first
       end
@@ -512,17 +622,21 @@ class EachTest < ActiveRecord::TestCase
     Post.in_batches(of: 2) do |batch|
       batch.where("author_id >= 1").update_all("author_id = author_id + 1")
     end
+
     assert_equal 2, person.reload.author_id # incremented only once
   end
 
-  if Enumerator.method_defined? :size
-    def test_find_in_batches_should_return_a_sized_enumerator
-      assert_equal 11, Post.find_in_batches(batch_size: 1).size
-      assert_equal 6, Post.find_in_batches(batch_size: 2).size
-      assert_equal 4, Post.find_in_batches(batch_size: 2, start: 4).size
-      assert_equal 4, Post.find_in_batches(batch_size: 3).size
-      assert_equal 1, Post.find_in_batches(batch_size: 10_000).size
-    end
+  def test_find_in_batches_should_return_a_sized_enumerator
+    batch_size = 2
+    start = 3
+    batch_count1 = (@total / batch_size.to_f).ceil
+    batch_count2 = ((@total_plus_one - start) / batch_size.to_f).ceil
+
+    assert_equal @total, Post.find_in_batches(batch_size: 1).size
+    assert_equal batch_count1, Post.find_in_batches(batch_size: batch_size).size
+    assert_equal batch_count2, Post.find_in_batches(batch_size: batch_size, start: start).size
+    assert_equal 1, Post.find_in_batches(batch_size: @total).size
+    assert_equal 1, Post.find_in_batches(batch_size: @total_plus_one).size
   end
 
   [true, false].each do |load|
@@ -590,9 +704,11 @@ class EachTest < ActiveRecord::TestCase
   test ".error_on_ignored_order_or_limit= is deprecated" do
     begin
       prev = ActiveRecord::Base.error_on_ignored_order
+
       assert_deprecated "Please use error_on_ignored_order= instead." do
         ActiveRecord::Base.error_on_ignored_order_or_limit = true
       end
+
       assert ActiveRecord::Base.error_on_ignored_order
     ensure
       ActiveRecord::Base.error_on_ignored_order = prev
@@ -604,6 +720,7 @@ class EachTest < ActiveRecord::TestCase
     actual = assert_deprecated "Please use error_on_ignored_order instead." do
       ActiveRecord::Base.error_on_ignored_order_or_limit
     end
+
     assert_equal expected, actual
   end
 
@@ -612,6 +729,7 @@ class EachTest < ActiveRecord::TestCase
     actual = assert_deprecated "Please use error_on_ignored_order instead." do
       Post.new.error_on_ignored_order_or_limit
     end
+
     assert_equal expected, actual
   end
 end
