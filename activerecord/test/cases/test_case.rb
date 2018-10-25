@@ -2,8 +2,8 @@
 
 require "active_support"
 require "active_support/testing/autorun"
-require "active_support/testing/method_call_assertions"
 require "active_support/testing/stream"
+require "minitest/mock_expectations"
 require "active_record/fixtures"
 
 require "cases/validations_repair_helper"
@@ -13,7 +13,6 @@ module ActiveRecord
   #
   # Defines some test assertions to test against SQL queries.
   class TestCase < ActiveSupport::TestCase #:nodoc:
-    include ActiveSupport::Testing::MethodCallAssertions
     include ActiveSupport::Testing::Stream
     include ActiveRecord::TestFixtures
     include ActiveRecord::ValidationsRepairHelper

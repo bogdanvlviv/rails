@@ -16,7 +16,7 @@ silence_warnings do
 end
 
 require "active_support/testing/autorun"
-require "active_support/testing/method_call_assertions"
+require "minitest/mock_expectations"
 require "action_controller"
 require "action_view"
 require "action_view/testing/resolvers"
@@ -190,8 +190,6 @@ module ActionDispatch
 end
 
 class ActiveSupport::TestCase
-  include ActiveSupport::Testing::MethodCallAssertions
-
   private
     # Skips the current run on Rubinius using Minitest::Assertions#skip
     def rubinius_skip(message = "")

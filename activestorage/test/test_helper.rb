@@ -7,6 +7,7 @@ require "bundler/setup"
 require "active_support"
 require "active_support/test_case"
 require "active_support/testing/autorun"
+require "minitest/mock_expectations"
 require "image_processing/mini_magick"
 
 begin

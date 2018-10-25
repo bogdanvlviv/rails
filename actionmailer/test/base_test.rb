@@ -975,7 +975,9 @@ class BasePreviewInterceptorsTest < ActiveSupport::TestCase
   test "you can register and unregister a preview interceptor to the mail object that gets passed the mail object before previewing" do
     ActionMailer::Base.register_preview_interceptor(MyInterceptor)
     mail = BaseMailer.welcome
-    stub_any_instance(BaseMailerPreview) do |instance|
+    instance = BaseMailerPreview.new
+
+    assert_called(BaseMailerPreview, :new, returns: instance) do
       instance.stub(:welcome, mail) do
         assert_called_with(MyInterceptor, :previewing_email, [mail]) do
           BaseMailerPreview.call(:welcome)
@@ -992,7 +994,9 @@ class BasePreviewInterceptorsTest < ActiveSupport::TestCase
   test "you can register and unregister a preview interceptor using its stringified name to the mail object that gets passed the mail object before previewing" do
     ActionMailer::Base.register_preview_interceptor("BasePreviewInterceptorsTest::MyInterceptor")
     mail = BaseMailer.welcome
-    stub_any_instance(BaseMailerPreview) do |instance|
+    instance = BaseMailerPreview.new
+
+    assert_called(BaseMailerPreview, :new, returns: instance) do
       instance.stub(:welcome, mail) do
         assert_called_with(MyInterceptor, :previewing_email, [mail]) do
           BaseMailerPreview.call(:welcome)
@@ -1009,7 +1013,9 @@ class BasePreviewInterceptorsTest < ActiveSupport::TestCase
   test "you can register and unregister a preview interceptor using its symbolized underscored name to the mail object that gets passed the mail object before previewing" do
     ActionMailer::Base.register_preview_interceptor(:"base_preview_interceptors_test/my_interceptor")
     mail = BaseMailer.welcome
-    stub_any_instance(BaseMailerPreview) do |instance|
+    instance = BaseMailerPreview.new
+
+    assert_called(BaseMailerPreview, :new, returns: instance) do
       instance.stub(:welcome, mail) do
         assert_called_with(MyInterceptor, :previewing_email, [mail]) do
           BaseMailerPreview.call(:welcome)
@@ -1026,7 +1032,9 @@ class BasePreviewInterceptorsTest < ActiveSupport::TestCase
   test "you can register and unregister multiple preview interceptors to the mail object that both get passed the mail object before previewing" do
     ActionMailer::Base.register_preview_interceptors("BasePreviewInterceptorsTest::MyInterceptor", MySecondInterceptor)
     mail = BaseMailer.welcome
-    stub_any_instance(BaseMailerPreview) do |instance|
+    instance = BaseMailerPreview.new
+
+    assert_called(BaseMailerPreview, :new, returns: instance) do
       instance.stub(:welcome, mail) do
         assert_called_with(MyInterceptor, :previewing_email, [mail]) do
           assert_called_with(MySecondInterceptor, :previewing_email, [mail]) do

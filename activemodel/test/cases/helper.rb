@@ -9,11 +9,8 @@ ActiveSupport::Deprecation.debug = true
 I18n.enforce_available_locales = false
 
 require "active_support/testing/autorun"
-require "active_support/testing/method_call_assertions"
 
 class ActiveModel::TestCase < ActiveSupport::TestCase
-  include ActiveSupport::Testing::MethodCallAssertions
-
   private
     # Skips the current run on Rubinius using Minitest::Assertions#skip
     def rubinius_skip(message = "")

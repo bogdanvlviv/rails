@@ -16,7 +16,7 @@ module Rails
 end
 
 require "active_support/testing/autorun"
-require "active_support/testing/method_call_assertions"
+require "minitest/mock_expectations"
 require "action_mailer"
 require "action_mailer/test_case"
 
@@ -34,8 +34,6 @@ FIXTURE_LOAD_PATH = File.expand_path("fixtures", __dir__)
 ActionMailer::Base.view_paths = FIXTURE_LOAD_PATH
 
 class ActiveSupport::TestCase
-  include ActiveSupport::Testing::MethodCallAssertions
-
   private
     # Skips the current run on Rubinius using Minitest::Assertions#skip
     def rubinius_skip(message = "")

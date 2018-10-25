@@ -56,7 +56,9 @@ class ActionMailerI18nWithControllerTest < ActionDispatch::IntegrationTest
   end
 
   def test_send_mail
-    stub_any_instance(Mail::SMTP, instance: Mail::SMTP.new({})) do |instance|
+    instance = Mail::SMTP.new({})
+
+    assert_called(Mail::SMTP, :new, returns: instance) do
       assert_called(instance, :deliver!) do
         with_translation "de", email_subject: "[Anmeldung] Willkommen" do
           get "/test/send_mail"

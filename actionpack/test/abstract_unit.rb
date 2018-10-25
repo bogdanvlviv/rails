@@ -27,6 +27,7 @@ else
 end
 
 require "active_support/testing/autorun"
+require "minitest/mock_expectations"
 require "abstract_controller"
 require "abstract_controller/railties/routes_helpers"
 require "action_controller"
@@ -357,8 +358,6 @@ class CommentsController < ResourcesController; end
 class AccountsController < ResourcesController; end
 class ImagesController < ResourcesController; end
 
-require "active_support/testing/method_call_assertions"
-
 class ForkingExecutor
   class Server
     include DRb::DRbUndumped
@@ -429,8 +428,6 @@ if RUBY_ENGINE == "ruby" && PROCESS_COUNT > 0
 end
 
 class ActiveSupport::TestCase
-  include ActiveSupport::Testing::MethodCallAssertions
-
   private
     # Skips the current run on Rubinius using Minitest::Assertions#skip
     def rubinius_skip(message = "")

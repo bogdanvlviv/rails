@@ -111,7 +111,9 @@ class MailDeliveryTest < ActiveSupport::TestCase
   end
 
   test "delivery method can be customized per instance" do
-    stub_any_instance(Mail::SMTP, instance: Mail::SMTP.new({})) do |instance|
+    instance = Mail::SMTP.new({})
+
+    assert_called(Mail::SMTP, :new, returns: instance) do
       assert_called(instance, :deliver!) do
         email = DeliveryMailer.welcome.deliver_now
         assert_instance_of Mail::SMTP, email.delivery_method
@@ -185,7 +187,9 @@ class MailDeliveryTest < ActiveSupport::TestCase
     old_perform_deliveries = DeliveryMailer.perform_deliveries
     begin
       DeliveryMailer.perform_deliveries = false
-      stub_any_instance(Mail::Message) do |instance|
+      instance = Mail::Message.new
+
+      assert_called(Mail::Message, :new, returns: instance) do
         assert_not_called(instance, :deliver!) do
           DeliveryMailer.welcome.deliver_now
         end
